@@ -15,8 +15,8 @@
 
 Para facilitar la evaluación sin necesidad de instalar entornos, compiladores ni dependencias externas, el simulador se encuentra desplegado y ejecutable directamente desde el navegador a través de **GitHub Pages**:
 
-> **Enlace de ejecución en vivo:** `https://<tu-usuario>.github.io/<nombre-del-repositorio>/`  
-> *(Nota: Reemplazar con la URL generada en Settings $\rightarrow$ Pages de este repositorio).*
+> **Enlace de ejecución en vivo:** `[https://<tu-usuario>.github.io/<nombre-del-repositorio>/](https://ignaciorodriguezm.github.io/semaforo-adaptativo-utn-k4572/)`  
+
 
 El sistema corre íntegramente del lado del cliente en tiempo real a $60\text{ FPS}$, integrando la animación física de la intersección vial, un tablero de control convencional, el diagrama de bloques con telemetría instantánea y un osciloscopio de **6 señales sincronizadas**.
 
