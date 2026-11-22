@@ -1,0 +1,2113 @@
+<!DOCTYPE html>
+<html lang="es" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Simulador en Tiempo Real: Semáforo Adaptativo de Lazo Cerrado (IoT / Control PD) | UTN FRBA</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts: Inter & JetBrains Mono para telemetría de ingeniería -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            scada: {
+              bg: '#060a12',
+              panel: '#0c1322',
+              card: '#111a2e',
+              border: '#1e2d4a',
+              accent: '#38bdf8',
+            }
+          }
+        }
+      }
+    };
+  </script>
+
+  <style>
+    /* Estilos base de sala de control SCADA */
+    body {
+      background-color: #060a12;
+      color: #e2e8f0;
+      font-family: 'Inter', sans-serif;
+      overflow-x: hidden;
+    }
+
+    /* Sliders personalizados estilo consola industrial */
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      height: 6px;
+      border-radius: 999px;
+      background: #1e293b;
+      outline: none;
+      transition: opacity 0.2s ease;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: #38bdf8;
+      border: 2px solid #0f172a;
+      cursor: pointer;
+      box-shadow: 0 0 10px rgba(56, 189, 248, 0.55);
+      transition: transform 0.15s ease, background-color 0.15s ease;
+    }
+    input[type="range"]::-webkit-slider-thumb:hover {
+      transform: scale(1.15);
+      background: #7dd3fc;
+    }
+    input[type="range"]:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+    }
+    input[type="range"]:disabled::-webkit-slider-thumb {
+      background: #64748b;
+      box-shadow: none;
+      cursor: not-allowed;
+    }
+
+    /* Animación LED pulsante */
+    @keyframes pulseGlow {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.55; transform: scale(0.95); }
+    }
+    .animate-led {
+      animation: pulseGlow 1.5s infinite ease-in-out;
+    }
+
+    /* Scrollbar sutil */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #060a12;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #1e2d4a;
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #334155;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col selection:bg-sky-500/30 selection:text-sky-200">
+
+  <!-- ==================== ENCABEZADO INSTITUCIONAL Y TELEMETRÍA GLOBAL ==================== -->
+  <header class="sticky top-0 z-30 bg-[#080e1a]/95 backdrop-blur-md border-b border-slate-800/90 px-4 py-3 shadow-lg">
+    <div class="max-w-[1720px] mx-auto flex flex-wrap items-center justify-between gap-3">
+      <!-- Identidad del Proyecto UTN FRBA -->
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-sky-500/20 to-indigo-600/20 border border-sky-500/40 flex items-center justify-center shadow-inner">
+          <svg class="w-6 h-6 text-sky-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+          </svg>
+        </div>
+        <div>
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="px-2 py-0.5 text-[11px] font-mono font-bold uppercase tracking-wider rounded bg-sky-500/15 text-sky-300 border border-sky-500/30">
+              UTN FRBA • Teoría de Control K-4572
+            </span>
+            <span class="text-xs text-slate-400 hidden sm:inline">Trabajo Final Integrador • Prof. Drando. Omar Civale</span>
+          </div>
+          <h1 class="text-base sm:text-lg font-bold text-slate-100 tracking-tight leading-snug mt-0.5">
+            Simulador en Tiempo Real: Semáforo Adaptativo de Lazo Cerrado <span class="text-sky-400">(IoT / Control PD)</span>
+          </h1>
+        </div>
+      </div>
+
+      <!-- Indicadores Globales y Exportación -->
+      <div class="flex flex-wrap items-center gap-2.5">
+        <!-- Reloj de Simulación -->
+        <div class="px-3 py-1.5 rounded-xl bg-slate-900/90 border border-slate-800 flex items-center gap-2.5">
+          <span id="simStatusDot" class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-led"></span>
+          <div class="text-xs">
+            <span class="text-slate-400">Ciclo Semafórico:</span>
+            <span id="headerCycleClock" class="font-mono font-bold text-slate-100 ml-1">t = 0</span>
+          </div>
+        </div>
+
+        <!-- Estado Arquitectura IoT -->
+        <div id="headerIotBadge" class="px-3 py-1.5 rounded-xl bg-emerald-950/60 border border-emerald-500/40 flex items-center gap-2 text-xs">
+          <span id="headerIotDot" class="w-2 h-2 rounded-full bg-emerald-400"></span>
+          <span id="headerIotText" class="font-mono font-semibold text-emerald-300">WAN IoT + EDGE ACTIVO</span>
+        </div>
+
+        <!-- Botón Descargar Datos CSV -->
+        <button id="btnExportCsv" type="button"
+          class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-[0.99] text-slate-100 border border-slate-700 hover:border-sky-500/50 text-xs font-semibold flex items-center gap-2 transition shadow-sm cursor-pointer">
+          <svg class="w-4 h-4 text-sky-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+          </svg>
+          <span>Descargar Datos CSV</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ==================== CONTENEDOR PRINCIPAL ==================== -->
+  <main class="flex-1 max-w-[1720px] w-full mx-auto p-3 sm:p-4 lg:p-5 grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-5">
+
+    <!-- =========================================================================
+         ÁREA 1: TABLERO DE CONTROL CONVENCIONAL (PANEL IZQUIERDO)
+         ========================================================================= -->
+    <aside class="lg:col-span-4 xl:col-span-3 flex flex-col gap-4">
+
+      <!-- Tarjeta: Ejecución y Perturbaciones -->
+      <section class="bg-[#0c1322] border border-slate-800/90 rounded-2xl p-4 shadow-xl">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-xs font-bold uppercase tracking-wider text-sky-400 flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-sky-400"></span>
+            Consola de Operación
+          </h2>
+          <span class="text-[11px] font-mono text-slate-400">PLC / EDGE HMI</span>
+        </div>
+
+        <!-- Controles de Reproducción -->
+        <div class="grid grid-cols-2 gap-2 mb-3">
+          <button id="btnTogglePlay" type="button"
+            class="col-span-2 py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/50 transition cursor-pointer">
+            <svg id="iconPlayPause" class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" />
+            </svg>
+            <span id="textPlayPause">Pausar Simulación</span>
+          </button>
+
+          <!-- Selector Velocidad -->
+          <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-1 flex items-center justify-between">
+            <button type="button" data-speed="1" class="speed-btn flex-1 py-1.5 rounded-lg text-xs font-mono font-bold bg-sky-500/20 text-sky-300 border border-sky-500/40 cursor-pointer">1x</button>
+            <button type="button" data-speed="2" class="speed-btn flex-1 py-1.5 rounded-lg text-xs font-mono font-semibold text-slate-400 hover:text-slate-200 cursor-pointer">2x</button>
+            <button type="button" data-speed="4" class="speed-btn flex-1 py-1.5 rounded-lg text-xs font-mono font-semibold text-slate-400 hover:text-slate-200 cursor-pointer">4x</button>
+          </div>
+
+          <!-- Reiniciar Sistema -->
+          <button id="btnReset" type="button"
+            class="py-2 px-3 rounded-xl bg-slate-800 hover:bg-rose-950/60 text-slate-200 hover:text-rose-200 border border-slate-700 hover:border-rose-500/50 text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer">
+            <svg class="w-4 h-4 text-rose-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            <span>Reiniciar Sistema</span>
+          </button>
+        </div>
+
+        <!-- Inyección de Perturbaciones -->
+        <div class="border-t border-slate-800/80 pt-3 mt-1">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-[11px] font-bold uppercase tracking-wider text-amber-400">Generador de Perturbaciones D(t)</span>
+            <span id="activeDisturbanceCount" class="text-[11px] font-mono text-slate-400">Sin perturbación</span>
+          </div>
+
+          <div class="flex flex-col gap-2">
+            <button id="btnHoraPico" type="button"
+              class="w-full py-2.5 px-3 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/40 text-amber-200 text-xs font-semibold flex items-center justify-between transition cursor-pointer">
+              <span class="flex items-center gap-2">
+                <span class="text-base">🚗</span>
+                <span>Perturbación: Hora Pico (+25 autos)</span>
+              </span>
+              <span id="badgeHoraPico" class="px-2 py-0.5 rounded-md bg-slate-900 font-mono text-[11px] text-amber-400 border border-amber-500/30">INYECTAR</span>
+            </button>
+
+            <button id="btnLluvia" type="button"
+              class="w-full py-2.5 px-3 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/40 text-indigo-200 text-xs font-semibold flex items-center justify-between transition cursor-pointer">
+              <span class="flex items-center gap-2">
+                <span class="text-base">🌧️</span>
+                <span>Perturbación: Lluvia / Accidente</span>
+              </span>
+              <span id="badgeLluvia" class="px-2 py-0.5 rounded-md bg-slate-900 font-mono text-[11px] text-indigo-300 border border-indigo-500/30">INYECTAR</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Tarjeta: Tablero de Control Convencional (Ley de Control y Parámetros) -->
+      <section class="bg-[#0c1322] border border-slate-800/90 rounded-2xl p-4 shadow-xl flex flex-col gap-3.5">
+        <div class="flex items-center justify-between">
+          <h2 class="text-xs font-bold uppercase tracking-wider text-sky-400 flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-sky-400"></span>
+            Tablero de Control Convencional
+          </h2>
+          <span class="text-[11px] font-mono text-slate-400">Gc(s)</span>
+        </div>
+
+        <!-- Selector de Tipo de Controlador -->
+        <div>
+          <label for="controllerSelect" class="block text-xs font-semibold text-slate-300 mb-1.5">
+            Arquitectura / Ley de Control
+          </label>
+          <select id="controllerSelect"
+            class="w-full rounded-xl bg-slate-900 border border-slate-700 focus:border-sky-500 focus:ring-1 focus:ring-sky-500 text-slate-100 text-xs sm:text-sm font-medium px-3 py-2.5 outline-none transition cursor-pointer">
+            <option value="OPEN">Lazo Abierto (Semáforo Fijo)</option>
+            <option value="P">Control Proporcional (P)</option>
+            <option value="PD" selected>Control Proporcional-Derivativo (PD)</option>
+            <option value="PI">Control Proporcional-Integral (PI)</option>
+            <option value="PID">Control PID Completo</option>
+          </select>
+          <p id="controllerDesc" class="text-[11px] text-slate-400 mt-1.5 leading-relaxed">
+            Acción proporcional inmediata + acción derivativa anticipatoria ante variaciones bruscas de cola.
+          </p>
+        </div>
+
+        <!-- Parámetro 1: Referencia / Setpoint R(t) -->
+        <div class="p-3 rounded-xl bg-slate-900/75 border border-slate-800/90">
+          <div class="flex items-center justify-between gap-2 mb-1.5">
+            <label for="numSetpoint" class="text-xs font-semibold text-cyan-300">
+              Referencia / Setpoint R(t)
+            </label>
+            <div class="flex items-center gap-1">
+              <input id="numSetpoint" type="number" min="0" max="40" step="1" value="15"
+                class="w-16 px-2 py-1 rounded-lg bg-slate-950 border border-slate-700 text-right font-mono text-xs font-bold text-cyan-300 focus:border-cyan-400 outline-none" />
+              <span class="text-[11px] font-mono text-slate-400">autos</span>
+            </div>
+          </div>
+          <input id="sliderSetpoint" type="range" min="0" max="40" step="1" value="15" class="w-full" />
+        </div>
+
+        <!-- Parámetro 2: Tiempo Base de Luz Verde -->
+        <div class="p-3 rounded-xl bg-slate-900/75 border border-slate-800/90">
+          <div class="flex items-center justify-between gap-2 mb-1.5">
+            <label for="numBaseGreen" class="text-xs font-semibold text-emerald-300">
+              Tiempo Base Luz Verde
+            </label>
+            <div class="flex items-center gap-1">
+              <input id="numBaseGreen" type="number" min="15" max="45" step="1" value="30"
+                class="w-16 px-2 py-1 rounded-lg bg-slate-950 border border-slate-700 text-right font-mono text-xs font-bold text-emerald-300 focus:border-emerald-400 outline-none" />
+              <span class="text-[11px] font-mono text-slate-400">seg</span>
+            </div>
+          </div>
+          <input id="sliderBaseGreen" type="range" min="15" max="45" step="1" value="30" class="w-full" />
+        </div>
+
+        <!-- Parámetro 3: Ganancia Proporcional Kp -->
+        <div id="groupKp" class="p-3 rounded-xl bg-slate-900/75 border border-slate-800/90 transition-opacity duration-200">
+          <div class="flex items-center justify-between gap-2 mb-1.5">
+            <div class="flex items-center gap-1.5">
+              <label for="numKp" class="text-xs font-semibold text-sky-300">Ganancia Proporcional Kp</label>
+              <span id="statusKp" class="text-[10px] font-mono px-1.5 py-0.2 rounded bg-sky-500/15 text-sky-300 border border-sky-500/30">ON</span>
+            </div>
+            <div class="flex items-center gap-1">
+              <input id="numKp" type="number" min="0.1" max="4.0" step="0.1" value="1.2"
+                class="w-16 px-2 py-1 rounded-lg bg-slate-950 border border-slate-700 text-right font-mono text-xs font-bold text-sky-300 focus:border-sky-400 outline-none disabled:opacity-40" />
+              <span class="text-[10px] font-mono text-slate-400">s/auto</span>
+            </div>
+          </div>
+          <input id="sliderKp" type="range" min="0.1" max="4.0" step="0.1" value="1.2" class="w-full" />
+        </div>
+
+        <!-- Parámetro 4: Ganancia Derivativa Kd -->
+        <div id="groupKd" class="p-3 rounded-xl bg-slate-900/75 border border-slate-800/90 transition-opacity duration-200">
+          <div class="flex items-center justify-between gap-2 mb-1.5">
+            <div class="flex items-center gap-1.5">
+              <label for="numKd" class="text-xs font-semibold text-purple-300">Ganancia Derivativa Kd</label>
+              <span id="statusKd" class="text-[10px] font-mono px-1.5 py-0.2 rounded bg-purple-500/15 text-purple-300 border border-purple-500/30">ON</span>
+            </div>
+            <div class="flex items-center gap-1">
+              <input id="numKd" type="number" min="0" max="3.0" step="0.1" value="0.8"
+                class="w-16 px-2 py-1 rounded-lg bg-slate-950 border border-slate-700 text-right font-mono text-xs font-bold text-purple-300 focus:border-purple-400 outline-none disabled:opacity-40" />
+              <span class="text-[10px] font-mono text-slate-400">s·c/a</span>
+            </div>
+          </div>
+          <input id="sliderKd" type="range" min="0" max="3.0" step="0.1" value="0.8" class="w-full" />
+        </div>
+
+        <!-- Parámetro 5: Ganancia Integral Ki -->
+        <div id="groupKi" class="p-3 rounded-xl bg-slate-900/75 border border-slate-800/90 transition-opacity duration-200 opacity-50">
+          <div class="flex items-center justify-between gap-2 mb-1.5">
+            <div class="flex items-center gap-1.5">
+              <label for="numKi" class="text-xs font-semibold text-amber-300">Ganancia Integral Ki</label>
+              <span id="statusKi" class="text-[10px] font-mono px-1.5 py-0.2 rounded bg-slate-800 text-slate-400 border border-slate-700">OFF</span>
+            </div>
+            <div class="flex items-center gap-1">
+              <input id="numKi" type="number" min="0" max="1.5" step="0.05" value="0.25" disabled
+                class="w-16 px-2 py-1 rounded-lg bg-slate-950 border border-slate-700 text-right font-mono text-xs font-bold text-amber-300 focus:border-amber-400 outline-none disabled:opacity-40" />
+              <span class="text-[10px] font-mono text-slate-400">s/a·c</span>
+            </div>
+          </div>
+          <input id="sliderKi" type="range" min="0" max="1.5" step="0.05" value="0.25" disabled class="w-full" />
+        </div>
+
+        <!-- Parámetro 6: Flujo Vehicular Base -->
+        <div class="p-3 rounded-xl bg-slate-900/75 border border-slate-800/90">
+          <div class="flex items-center justify-between gap-2 mb-1.5">
+            <label for="numBaseFlow" class="text-xs font-semibold text-slate-200">
+              Flujo Vehicular Base
+            </label>
+            <div class="flex items-center gap-1">
+              <input id="numBaseFlow" type="number" min="2" max="25" step="1" value="10"
+                class="w-16 px-2 py-1 rounded-lg bg-slate-950 border border-slate-700 text-right font-mono text-xs font-bold text-slate-200 focus:border-sky-400 outline-none" />
+              <span class="text-[10px] font-mono text-slate-400">a/ciclo</span>
+            </div>
+          </div>
+          <input id="sliderBaseFlow" type="range" min="2" max="25" step="1" value="10" class="w-full" />
+        </div>
+      </section>
+
+      <!-- Tarjeta: Resiliencia IoT / Edge Computing (Corte de Internet) -->
+      <section id="iotCard" class="bg-[#0c1322] border border-slate-800/90 rounded-2xl p-4 shadow-xl transition-colors duration-300">
+        <div class="flex items-center justify-between mb-2">
+          <h2 class="text-xs font-bold uppercase tracking-wider text-sky-400 flex items-center gap-2">
+            <svg class="w-4 h-4 text-sky-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0" />
+            </svg>
+            Conectividad IoT &amp; Shell Edge
+          </h2>
+          <span id="iotLatencyTag" class="text-[11px] font-mono text-emerald-400">RTT: 18ms</span>
+        </div>
+
+        <button id="btnToggleInternet" type="button"
+          class="w-full py-2.5 px-3 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-xs font-semibold flex items-center justify-between transition cursor-pointer mb-2.5">
+          <span class="flex items-center gap-2 text-slate-200">
+            <span id="internetSwitchDot" class="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
+            <span id="internetSwitchLabel">Simular Corte de Internet (Modo Edge Local)</span>
+          </span>
+          <span id="internetSwitchState" class="px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 font-mono text-[10px] border border-emerald-500/30">
+            ONLINE
+          </span>
+        </button>
+
+        <div id="iotExplanationBox" class="p-2.5 rounded-xl bg-slate-950/80 border border-slate-800 text-[11px] text-slate-300 leading-relaxed">
+          <strong class="text-emerald-400">Enlace WAN / Centro de Control Activo:</strong> El controlador local (Arduino/PLC en gabinete IP65) ejecuta el lazo cerrado PD en tiempo real y sincroniza telemetría con la nube SCADA.
+        </div>
+      </section>
+    </aside>
+
+    <!-- =========================================================================
+         ÁREAS 2 Y 3: INTERSECCIÓN FÍSICA, DIAGRAMA DE BLOQUES Y 6 SEÑALES
+         ========================================================================= -->
+    <div class="lg:col-span-8 xl:col-span-9 flex flex-col gap-4 lg:gap-5">
+
+      <!-- =====================================================================
+           ÁREA 2: VISUALIZACIÓN FÍSICA DE LA INTERSECCIÓN Y ESTADO DEL SISTEMA
+           ===================================================================== -->
+      <section class="bg-[#0c1322] border border-slate-800/90 rounded-2xl p-4 shadow-xl">
+        <!-- Cabecera del Panel Físico con Badge de Régimen de Respuesta -->
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+          <div>
+            <h2 class="text-xs sm:text-sm font-bold uppercase tracking-wider text-slate-200 flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-sky-400"></span>
+              Planta Física: Intersección Vehicular &amp; Magnetómetros de Calzada
+            </h2>
+            <p class="text-xs text-slate-400 mt-0.5">
+              Modelo Av. del Libertador • Sensores inductivos subterráneos H(s) y actuador semafórico LED Ga(s)
+            </p>
+          </div>
+
+          <!-- BADGE PROMINENTE DEL RÉGIMEN DE RESPUESTA -->
+          <div id="regimeBadge"
+            class="px-4 py-2 rounded-xl bg-emerald-500/15 border border-emerald-500/50 text-emerald-300 flex items-center gap-2.5 shadow-lg transition-all duration-300">
+            <span id="regimeDot" class="w-3 h-3 rounded-full bg-emerald-400 animate-led"></span>
+            <div>
+              <div class="text-[10px] font-mono uppercase tracking-widest opacity-80">Régimen de Respuesta</div>
+              <div id="regimeText" class="text-xs sm:text-sm font-extrabold tracking-wide">ESTADO ESTABLE</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Canvas de la Intersección Vial -->
+        <div class="relative w-full h-[250px] sm:h-[280px] rounded-xl overflow-hidden border border-slate-800 bg-[#070b14]">
+          <canvas id="intersectionCanvas" class="w-full h-full block"></canvas>
+
+          <!-- Overlay HUD superior izquierdo dentro del canvas -->
+          <div class="absolute top-2.5 left-2.5 flex flex-wrap items-center gap-2 pointer-events-none">
+            <div class="px-2.5 py-1 rounded-lg bg-slate-950/85 backdrop-blur border border-slate-800 text-[11px] font-mono">
+              <span class="text-slate-400">Fase:</span>
+              <span id="hudLightPhase" class="font-bold text-rose-400 ml-1">ROJO (Acumulando)</span>
+            </div>
+            <div class="px-2.5 py-1 rounded-lg bg-slate-950/85 backdrop-blur border border-slate-800 text-[11px] font-mono">
+              <span class="text-slate-400">Verde Asignado U(t):</span>
+              <span id="hudAssignedGreen" class="font-bold text-emerald-400 ml-1">30.0 s</span>
+            </div>
+            <div class="px-2.5 py-1 rounded-lg bg-slate-950/85 backdrop-blur border border-slate-800 text-[11px] font-mono">
+              <span class="text-slate-400">Cola Real C(t):</span>
+              <span id="hudQueueCount" class="font-bold text-sky-300 ml-1">15 autos</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- DIAGRAMA DE BLOQUES DE LAZO CERRADO EN VIVO -->
+        <div class="mt-4 pt-3.5 border-t border-slate-800/80">
+          <div class="flex flex-wrap items-center justify-between gap-2 mb-2.5">
+            <span class="text-[11px] font-bold uppercase tracking-wider text-sky-400">
+              Diagrama de Bloques de Lazo Cerrado (Telemetría Instantánea)
+            </span>
+            <span class="text-[11px] font-mono text-slate-400">
+              E(t) = C(t) - R(t) | Zona Normalidad: ±5 autos
+            </span>
+          </div>
+
+          <!-- Flujo visual de bloques con valores en vivo -->
+          <div class="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-7 gap-2 items-stretch font-mono text-xs">
+            <!-- Bloque 1: Referencia R(t) -->
+            <div class="p-2.5 rounded-xl bg-slate-900/90 border border-cyan-500/40 flex flex-col justify-between">
+              <div class="flex items-center justify-between text-[10px] text-cyan-400 font-bold">
+                <span>ENTRADA R(t)</span>
+                <span>→ ⊕</span>
+              </div>
+              <div id="bdRef" class="text-sm sm:text-base font-bold text-cyan-300 my-1">15 autos</div>
+              <div class="text-[10px] text-slate-400 truncate">Setpoint Cola</div>
+            </div>
+
+            <!-- Bloque 2: Error E(t) -->
+            <div class="p-2.5 rounded-xl bg-slate-900/90 border border-amber-500/40 flex flex-col justify-between">
+              <div class="flex items-center justify-between text-[10px] text-amber-400 font-bold">
+                <span>ERROR E(t)</span>
+                <span>→</span>
+              </div>
+              <div id="bdErr" class="text-sm sm:text-base font-bold text-amber-300 my-1">0.0 autos</div>
+              <div class="text-[10px] text-slate-400 truncate">C(t) - R(t)</div>
+            </div>
+
+            <!-- Bloque 3: Controlador Gc(s) -->
+            <div class="p-2.5 rounded-xl bg-slate-900/90 border border-purple-500/40 flex flex-col justify-between">
+              <div class="flex items-center justify-between text-[10px] text-purple-400 font-bold">
+                <span>CONTROL Gc(s)</span>
+                <span>→</span>
+              </div>
+              <div id="bdCtrl" class="text-sm sm:text-base font-bold text-purple-300 my-1">PD</div>
+              <div id="bdCtrlTerms" class="text-[10px] text-slate-400 truncate">Up:0.0 Ud:0.0</div>
+            </div>
+
+            <!-- Bloque 4: Actuador U(t) -->
+            <div class="p-2.5 rounded-xl bg-slate-900/90 border border-emerald-500/40 flex flex-col justify-between">
+              <div class="flex items-center justify-between text-[10px] text-emerald-400 font-bold">
+                <span>ACTUADOR U(t)</span>
+                <span>→</span>
+              </div>
+              <div id="bdAct" class="text-sm sm:text-base font-bold text-emerald-300 my-1">30.0 s</div>
+              <div class="text-[10px] text-slate-400 truncate">Luz Verde [15-60s]</div>
+            </div>
+
+            <!-- Bloque 5: Perturbación D(t) -->
+            <div class="p-2.5 rounded-xl bg-slate-900/90 border border-rose-500/40 flex flex-col justify-between">
+              <div class="flex items-center justify-between text-[10px] text-rose-400 font-bold">
+                <span>PERTURB. D(t)</span>
+                <span>↓ ⊕</span>
+              </div>
+              <div id="bdDist" class="text-sm sm:text-base font-bold text-rose-300 my-1">+0 a/c</div>
+              <div class="text-[10px] text-slate-400 truncate">Carga / Clima</div>
+            </div>
+
+            <!-- Bloque 6: Planta / Salida C(t) -->
+            <div class="p-2.5 rounded-xl bg-slate-900/90 border border-sky-500/40 flex flex-col justify-between">
+              <div class="flex items-center justify-between text-[10px] text-sky-400 font-bold">
+                <span>SALIDA C(t)</span>
+                <span>→</span>
+              </div>
+              <div id="bdOut" class="text-sm sm:text-base font-bold text-sky-300 my-1">15.0 autos</div>
+              <div class="text-[10px] text-slate-400 truncate">Planta Gp(s)</div>
+            </div>
+
+            <!-- Bloque 7: Realimentación H(s) -->
+            <div class="col-span-2 sm:col-span-2 xl:col-span-1 p-2.5 rounded-xl bg-slate-900/90 border border-teal-500/40 flex flex-col justify-between">
+              <div class="flex items-center justify-between text-[10px] text-teal-400 font-bold">
+                <span>SENSOR H(s)</span>
+                <span>↺</span>
+              </div>
+              <div id="bdFb" class="text-sm sm:text-base font-bold text-teal-300 my-1">15 pulsos</div>
+              <div class="text-[10px] text-slate-400 truncate">Magnetómetros</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- =====================================================================
+           ÁREA 3: REPRESENTACIÓN DE LAS 6 SEÑALES EN TIEMPO REAL (GRILLA 2x3)
+           ===================================================================== -->
+      <section>
+        <div class="flex flex-wrap items-center justify-between gap-2 mb-3 px-1">
+          <div class="flex items-center gap-2">
+            <span class="w-2.5 h-2.5 rounded-full bg-sky-400"></span>
+            <h2 class="text-xs sm:text-sm font-bold uppercase tracking-wider text-slate-200">
+              Osciloscopio de Telemetría: 6 Señales del Lazo en Tiempo Real
+            </h2>
+          </div>
+          <!-- Leyenda de Regímenes en Gráfica C(t) -->
+          <div class="flex flex-wrap items-center gap-3 text-[11px] font-mono text-slate-400">
+            <span class="flex items-center gap-1.5">
+              <span class="w-3 h-2.5 rounded-sm bg-amber-500/30 border border-amber-500/60"></span>
+              Estado Transitorio
+            </span>
+            <span class="flex items-center gap-1.5">
+              <span class="w-3 h-2.5 rounded-sm bg-emerald-500/25 border border-emerald-500/60"></span>
+              Estado Estable
+            </span>
+            <span class="flex items-center gap-1.5">
+              <span class="w-3 h-2.5 rounded-sm bg-rose-500/30 border border-rose-500/60"></span>
+              Saturación
+            </span>
+          </div>
+        </div>
+
+        <!-- Grilla 2x3 de Gráficos Canvas HTML5 -->
+        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+
+          <!-- SEÑAL 1: Referencia R(t) -->
+          <article class="bg-[#0c1322] border border-slate-800/90 rounded-2xl p-3.5 shadow-lg flex flex-col">
+            <div class="flex items-start justify-between gap-2 mb-2">
+              <div>
+                <span class="text-[10px] font-mono uppercase tracking-wider text-cyan-400 font-bold">Señal 1 • Entrada</span>
+                <h3 class="text-xs sm:text-sm font-bold text-slate-100">Referencia R(t) <span class="text-slate-400 font-normal">[autos]</span></h3>
+              </div>
+              <div id="valSig1" class="px-2.5 py-1 rounded-lg bg-cyan-950/70 border border-cyan-500/40 font-mono text-xs font-bold text-cyan-300">
+                15.0 autos
+              </div>
+            </div>
+            <div class="relative w-full h-[175px] rounded-xl bg-[#070b14] border border-slate-800/80 overflow-hidden">
+              <canvas id="chart1" class="w-full h-full block"></canvas>
+            </div>
+            <div class="mt-2 flex items-center justify-between text-[11px] text-slate-400 font-mono">
+              <span>Escalón de Setpoint</span>
+              <span class="text-cyan-400">R(t) = Consigna</span>
+            </div>
+          </article>
+
+          <!-- SEÑAL 2: Valor Medido / Variable Controlada C(t) -->
+          <article class="bg-[#0c1322] border border-slate-800/90 rounded-2xl p-3.5 shadow-lg flex flex-col">
+            <div class="flex items-start justify-between gap-2 mb-2">
+              <div>
+                <span class="text-[10px] font-mono uppercase tracking-wider text-sky-400 font-bold">Señal 2 • Salida Planta</span>
+                <h3 class="text-xs sm:text-sm font-bold text-slate-100">Valor Medido C(t) <span class="text-slate-400 font-normal">[autos]</span></h3>
+              </div>
+              <div id="valSig2" class="px-2.5 py-1 rounded-lg bg-sky-950/70 border border-sky-500/40 font-mono text-xs font-bold text-sky-300">
+                15.0 autos
+              </div>
+            </div>
+            <div class="relative w-full h-[175px] rounded-xl bg-[#070b14] border border-slate-800/80 overflow-hidden">
+              <canvas id="chart2" class="w-full h-full block"></canvas>
+            </div>
+            <div class="mt-2 flex items-center justify-between text-[11px] text-slate-400 font-mono">
+              <span>Cola Real + Regímenes</span>
+              <span class="text-cyan-400">--- Setpoint R(t)</span>
+            </div>
+          </article>
+
+          <!-- SEÑAL 3: Perturbación Externa D(t) -->
+          <article class="bg-[#0c1322] border border-slate-800/90 rounded-2xl p-3.5 shadow-lg flex flex-col">
+            <div class="flex items-start justify-between gap-2 mb-2">
+              <div>
+                <span class="text-[10px] font-mono uppercase tracking-wider text-rose-400 font-bold">Señal 3 • Carga Externa</span>
+                <h3 class="text-xs sm:text-sm font-bold text-slate-100">Perturbación D(t) <span class="text-slate-400 font-normal">[autos/ciclo]</span></h3>
+              </div>
+              <div id="valSig3" class="px-2.5 py-1 rounded-lg bg-rose-950/70 border border-rose-500/40 font-mono text-xs font-bold text-rose-300">
+                0.0 a/c
+              </div>
+            </div>
+            <div class="relative w-full h-[175px] rounded-xl bg-[#070b14] border border-slate-800/80 overflow-hidden">
+              <canvas id="chart3" class="w-full h-full block"></canvas>
+            </div>
+            <div class="mt-2 flex items-center justify-between text-[11px] text-slate-400 font-mono">
+              <span>Hora Pico / Clima Adverso</span>
+              <span class="text-rose-400">D(t) Exógena</span>
+            </div>
+          </article>
+
+          <!-- SEÑAL 4: Señal de Error E(t) = C(t) - R(t) -->
+          <article class="bg-[#0c1322] border border-slate-800/90 rounded-2xl p-3.5 shadow-lg flex flex-col">
+            <div class="flex items-start justify-between gap-2 mb-2">
+              <div>
+                <span class="text-[10px] font-mono uppercase tracking-wider text-amber-400 font-bold">Señal 4 • Comparador</span>
+                <h3 class="text-xs sm:text-sm font-bold text-slate-100">Señal de Error E(t) <span class="text-slate-400 font-normal">[autos]</span></h3>
+              </div>
+              <div id="valSig4" class="px-2.5 py-1 rounded-lg bg-amber-950/70 border border-amber-500/40 font-mono text-xs font-bold text-amber-300">
+                0.0 autos
+              </div>
+            </div>
+            <div class="relative w-full h-[175px] rounded-xl bg-[#070b14] border border-slate-800/80 overflow-hidden">
+              <canvas id="chart4" class="w-full h-full block"></canvas>
+            </div>
+            <div class="mt-2 flex items-center justify-between text-[11px] text-slate-400 font-mono">
+              <span>E(t) = C(t) - R(t)</span>
+              <span class="text-emerald-400">Banda ±5 autos</span>
+            </div>
+          </article>
+
+          <!-- SEÑAL 5: Derivativo Dinámico Ud(t) = Kd * de(t)/dt -->
+          <article class="bg-[#0c1322] border border-slate-800/90 rounded-2xl p-3.5 shadow-lg flex flex-col">
+            <div class="flex items-start justify-between gap-2 mb-2">
+              <div>
+                <span class="text-[10px] font-mono uppercase tracking-wider text-purple-400 font-bold">Señal 5 • Anticipación</span>
+                <h3 class="text-xs sm:text-sm font-bold text-slate-100">Derivativo Dinámico Ud(t) <span class="text-slate-400 font-normal">[s]</span></h3>
+              </div>
+              <div id="valSig5" class="px-2.5 py-1 rounded-lg bg-purple-950/70 border border-purple-500/40 font-mono text-xs font-bold text-purple-300">
+                0.00 s
+              </div>
+            </div>
+            <div class="relative w-full h-[175px] rounded-xl bg-[#070b14] border border-slate-800/80 overflow-hidden">
+              <canvas id="chart5" class="w-full h-full block"></canvas>
+            </div>
+            <div class="mt-2 flex items-center justify-between text-[11px] text-slate-400 font-mono">
+              <span>Ud(t) = Kd · de(t)/dt</span>
+              <span id="sig5StatusLabel" class="text-purple-400">Activo en PD/PID</span>
+            </div>
+          </article>
+
+          <!-- SEÑAL 6: Señal del Controlador / Actuación U(t) -->
+          <article class="bg-[#0c1322] border border-slate-800/90 rounded-2xl p-3.5 shadow-lg flex flex-col">
+            <div class="flex items-start justify-between gap-2 mb-2">
+              <div>
+                <span class="text-[10px] font-mono uppercase tracking-wider text-emerald-400 font-bold">Señal 6 • Mando Actuador</span>
+                <h3 class="text-xs sm:text-sm font-bold text-slate-100">Actuación U(t) <span class="text-slate-400 font-normal">[seg verde]</span></h3>
+              </div>
+              <div id="valSig6" class="px-2.5 py-1 rounded-lg bg-emerald-950/70 border border-emerald-500/40 font-mono text-xs font-bold text-emerald-300">
+                30.0 s
+              </div>
+            </div>
+            <div class="relative w-full h-[175px] rounded-xl bg-[#070b14] border border-slate-800/80 overflow-hidden">
+              <canvas id="chart6" class="w-full h-full block"></canvas>
+            </div>
+            <div class="mt-2 flex items-center justify-between text-[11px] text-slate-400 font-mono">
+              <span>Saturación: 15s – 60s</span>
+              <span class="text-emerald-400">Tiempo Luz Verde</span>
+            </div>
+          </article>
+
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <!-- Toast de Notificación (sin usar alert()) -->
+  <div id="toastNotification"
+    class="fixed bottom-5 right-5 z-50 translate-y-20 opacity-0 pointer-events-none transition-all duration-300 bg-slate-900 border border-sky-500/50 text-slate-100 px-4 py-3 rounded-xl shadow-2xl flex items-center gap-3 text-xs font-medium">
+    <span class="w-2.5 h-2.5 rounded-full bg-sky-400"></span>
+    <span id="toastMessage">Datos exportados correctamente.</span>
+  </div>
+
+  <!-- ==================== LÓGICA DE SIMULACIÓN, CONTROL Y RENDERIZADO CANVAS ==================== -->
+  <script>
+    (() => {
+      'use strict';
+
+      // =========================================================================
+      // 1. ESTADO GLOBAL DEL SISTEMA DE CONTROL Y SIMULACIÓN
+      // =========================================================================
+      const MAX_HISTORY = 60;          // Ventana visible de ciclos en los osciloscopios
+      const GREEN_MIN = 15.0;          // Límite inferior de seguridad del actuador [s]
+      const GREEN_MAX = 60.0;          // Límite superior de saturación del actuador [s]
+      const NORMALITY_BAND = 5.0;      // Banda de normalidad ±5 autos (histéresis conceptual)
+      const SATURATION_QUEUE = 65.0;   // Umbral crítico de saturación/inestabilidad vial
+
+      const state = {
+        running: true,
+        speed: 1,                      // 1x, 2x, 4x
+        cycle: 0,                      // Tiempo discreto t en ciclos semafóricos
+        phaseProgress: 0,              // Progreso intra-ciclo [0..1] para animación fluida
+
+        // Parámetros configurables del Tablero Convencional
+        controllerType: 'PD',          // 'OPEN' | 'P' | 'PD' | 'PI' | 'PID'
+        setpoint: 15,                  // R(t) [autos]
+        baseGreen: 30,                 // Tiempo base de luz verde [s]
+        kp: 1.2,                       // Ganancia Proporcional [s/auto]
+        kd: 0.8,                       // Ganancia Derivativa [s/(auto/ciclo)]
+        ki: 0.25,                      // Ganancia Integral [s/(auto*ciclo)]
+        baseFlow: 10,                  // Flujo vehicular base [autos/ciclo]
+
+        // Estado interno del controlador y planta
+        queue: 15.0,                   // C(t) longitud de cola medida [autos]
+        prevError: 0.0,                // E(t-1) para cálculo derivativo
+        integralError: 0.0,            // Acumulador integral con anti-windup
+        udFiltered: 0.0,               // Acción derivativa suavizada [s]
+        upCurrent: 0.0,                // Acción proporcional actual [s]
+        uiCurrent: 0.0,                // Acción integral actual [s]
+        greenTime: 30.0,               // U(t) tiempo de luz verde asignado [s]
+        error: 0.0,                    // E(t) = C(t) - R(t) [autos]
+        disturbance: 0.0,              // D(t) magnitud equivalente de perturbación [autos/ciclo]
+        regime: 'ESTABLE',             // 'ESTABLE' | 'TRANSITORIO' | 'SATURACION'
+
+        // Perturbaciones temporales activas (duración en ciclos)
+        horaPicoRemaining: 0,
+        lluviaRemaining: 0,
+
+        // Resiliencia IoT / Edge Local
+        internetCut: false,
+        edgeBufferedPackets: 0,
+
+        // Historial de series temporales (para gráficos y exportación CSV)
+        history: [],
+
+        // Entidades visuales para la animación de la intersección
+        cars: [],
+        rainDrops: [],
+        magnetometerPulse: 0,
+        lastFrameTime: performance.now(),
+        toastTimer: null
+      };
+
+      // Descripciones pedagógicas según la ley de control elegida
+      const CONTROLLER_DESCRIPTIONS = {
+        OPEN: 'Semáforo convencional de tiempos fijos. Ignora la señal de realimentación H(s) y mantiene U(t) = Tiempo Base sin corregir perturbaciones.',
+        P: 'Control Proporcional puro: ajusta la luz verde proporcionalmente al error E(t). Puede presentar error remanente en estado estable ante cargas altas.',
+        PD: 'Control Proporcional-Derivativo (TFI): combina respuesta proporcional con anticipación derivativa Ud(t) = Kd·de/dt para frenar picos súbitos de tránsito.',
+        PI: 'Control Proporcional-Integral: la acción integral Ki·∫E(t)dt elimina el error en estado estacionario frente a aumentos sostenidos de caudal.',
+        PID: 'Controlador PID completo: integra acción proporcional, integral y derivativa para máxima precisión estacionaria y amortiguamiento transitorio.'
+      };
+
+      // =========================================================================
+      // 2. REFERENCIAS AL DOM
+      // =========================================================================
+      const dom = {
+        headerCycleClock: document.getElementById('headerCycleClock'),
+        simStatusDot: document.getElementById('simStatusDot'),
+        headerIotBadge: document.getElementById('headerIotBadge'),
+        headerIotDot: document.getElementById('headerIotDot'),
+        headerIotText: document.getElementById('headerIotText'),
+        btnExportCsv: document.getElementById('btnExportCsv'),
+
+        btnTogglePlay: document.getElementById('btnTogglePlay'),
+        iconPlayPause: document.getElementById('iconPlayPause'),
+        textPlayPause: document.getElementById('textPlayPause'),
+        speedBtns: document.querySelectorAll('.speed-btn'),
+        btnReset: document.getElementById('btnReset'),
+
+        btnHoraPico: document.getElementById('btnHoraPico'),
+        badgeHoraPico: document.getElementById('badgeHoraPico'),
+        btnLluvia: document.getElementById('btnLluvia'),
+        badgeLluvia: document.getElementById('badgeLluvia'),
+        activeDisturbanceCount: document.getElementById('activeDisturbanceCount'),
+
+        controllerSelect: document.getElementById('controllerSelect'),
+        controllerDesc: document.getElementById('controllerDesc'),
+
+        numSetpoint: document.getElementById('numSetpoint'),
+        sliderSetpoint: document.getElementById('sliderSetpoint'),
+        numBaseGreen: document.getElementById('numBaseGreen'),
+        sliderBaseGreen: document.getElementById('sliderBaseGreen'),
+
+        groupKp: document.getElementById('groupKp'),
+        statusKp: document.getElementById('statusKp'),
+        numKp: document.getElementById('numKp'),
+        sliderKp: document.getElementById('sliderKp'),
+
+        groupKd: document.getElementById('groupKd'),
+        statusKd: document.getElementById('statusKd'),
+        numKd: document.getElementById('numKd'),
+        sliderKd: document.getElementById('sliderKd'),
+
+        groupKi: document.getElementById('groupKi'),
+        statusKi: document.getElementById('statusKi'),
+        numKi: document.getElementById('numKi'),
+        sliderKi: document.getElementById('sliderKi'),
+
+        numBaseFlow: document.getElementById('numBaseFlow'),
+        sliderBaseFlow: document.getElementById('sliderBaseFlow'),
+
+        iotCard: document.getElementById('iotCard'),
+        iotLatencyTag: document.getElementById('iotLatencyTag'),
+        btnToggleInternet: document.getElementById('btnToggleInternet'),
+        internetSwitchDot: document.getElementById('internetSwitchDot'),
+        internetSwitchLabel: document.getElementById('internetSwitchLabel'),
+        internetSwitchState: document.getElementById('internetSwitchState'),
+        iotExplanationBox: document.getElementById('iotExplanationBox'),
+
+        regimeBadge: document.getElementById('regimeBadge'),
+        regimeDot: document.getElementById('regimeDot'),
+        regimeText: document.getElementById('regimeText'),
+
+        intersectionCanvas: document.getElementById('intersectionCanvas'),
+        hudLightPhase: document.getElementById('hudLightPhase'),
+        hudAssignedGreen: document.getElementById('hudAssignedGreen'),
+        hudQueueCount: document.getElementById('hudQueueCount'),
+
+        bdRef: document.getElementById('bdRef'),
+        bdErr: document.getElementById('bdErr'),
+        bdCtrl: document.getElementById('bdCtrl'),
+        bdCtrlTerms: document.getElementById('bdCtrlTerms'),
+        bdAct: document.getElementById('bdAct'),
+        bdDist: document.getElementById('bdDist'),
+        bdOut: document.getElementById('bdOut'),
+        bdFb: document.getElementById('bdFb'),
+
+        valSig1: document.getElementById('valSig1'),
+        valSig2: document.getElementById('valSig2'),
+        valSig3: document.getElementById('valSig3'),
+        valSig4: document.getElementById('valSig4'),
+        valSig5: document.getElementById('valSig5'),
+        sig5StatusLabel: document.getElementById('sig5StatusLabel'),
+        valSig6: document.getElementById('valSig6'),
+
+        charts: [
+          document.getElementById('chart1'),
+          document.getElementById('chart2'),
+          document.getElementById('chart3'),
+          document.getElementById('chart4'),
+          document.getElementById('chart5'),
+          document.getElementById('chart6')
+        ],
+
+        toastNotification: document.getElementById('toastNotification'),
+        toastMessage: document.getElementById('toastMessage')
+      };
+
+      // =========================================================================
+      // 3. UTILIDADES DE INTERFAZ Y SINCRONIZACIÓN DE CONTROLES
+      // =========================================================================
+      function showToast(msg) {
+        dom.toastMessage.textContent = msg;
+        dom.toastNotification.classList.remove('translate-y-20', 'opacity-0');
+        clearTimeout(state.toastTimer);
+        state.toastTimer = setTimeout(() => {
+          dom.toastNotification.classList.add('translate-y-20', 'opacity-0');
+        }, 3200);
+      }
+
+      // Sincroniza un par (input numérico + range slider) con validación segura
+      function bindParamPair(numEl, sliderEl, min, max, stateKey) {
+        const updateVal = (raw) => {
+          let val = parseFloat(raw);
+          if (Number.isNaN(val)) return;
+          val = Math.max(min, Math.min(max, val));
+          state[stateKey] = val;
+          numEl.value = val;
+          sliderEl.value = val;
+          evaluateImmediateControlPreview();
+        };
+        sliderEl.addEventListener('input', (e) => updateVal(e.target.value));
+        numEl.addEventListener('change', (e) => updateVal(e.target.value));
+      }
+
+      // Habilita / deshabilita Kp, Kd y Ki dinámicamente según el controlador seleccionado
+      function updateControllerControlsState() {
+        const mode = state.controllerType;
+        dom.controllerDesc.textContent = CONTROLLER_DESCRIPTIONS[mode];
+
+        const useP = ['P', 'PD', 'PI', 'PID'].includes(mode);
+        const useD = ['PD', 'PID'].includes(mode);
+        const useI = ['PI', 'PID'].includes(mode);
+
+        // Configurar Kp
+        dom.numKp.disabled = !useP;
+        dom.sliderKp.disabled = !useP;
+        dom.groupKp.classList.toggle('opacity-45', !useP);
+        dom.statusKp.textContent = useP ? 'ON' : 'OFF';
+        dom.statusKp.className = useP
+          ? 'text-[10px] font-mono px-1.5 py-0.2 rounded bg-sky-500/15 text-sky-300 border border-sky-500/30'
+          : 'text-[10px] font-mono px-1.5 py-0.2 rounded bg-slate-800 text-slate-400 border border-slate-700';
+
+        // Configurar Kd
+        dom.numKd.disabled = !useD;
+        dom.sliderKd.disabled = !useD;
+        dom.groupKd.classList.toggle('opacity-45', !useD);
+        dom.statusKd.textContent = useD ? 'ON' : 'OFF';
+        dom.statusKd.className = useD
+          ? 'text-[10px] font-mono px-1.5 py-0.2 rounded bg-purple-500/15 text-purple-300 border border-purple-500/30'
+          : 'text-[10px] font-mono px-1.5 py-0.2 rounded bg-slate-800 text-slate-400 border border-slate-700';
+        dom.sig5StatusLabel.textContent = useD ? 'Activo en PD/PID' : 'Inactivo (Kd = 0)';
+        dom.sig5StatusLabel.className = useD ? 'text-purple-400' : 'text-slate-500';
+
+        // Configurar Ki
+        dom.numKi.disabled = !useI;
+        dom.sliderKi.disabled = !useI;
+        dom.groupKi.classList.toggle('opacity-45', !useI);
+        dom.statusKi.textContent = useI ? 'ON' : 'OFF';
+        dom.statusKi.className = useI
+          ? 'text-[10px] font-mono px-1.5 py-0.2 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30'
+          : 'text-[10px] font-mono px-1.5 py-0.2 rounded bg-slate-800 text-slate-400 border border-slate-700';
+
+        // Si se desactiva el integrador, limpiar acumulador para evitar saltos al reactivar
+        if (!useI) {
+          state.integralError = 0;
+        }
+
+        evaluateImmediateControlPreview();
+      }
+
+      // Actualiza visualmente los botones de perturbación activa
+      function updateDisturbanceButtonsUI() {
+        let activeCount = 0;
+        if (state.horaPicoRemaining > 0) {
+          activeCount++;
+          dom.badgeHoraPico.textContent = `ACTIVO (${state.horaPicoRemaining}c)`;
+          dom.btnHoraPico.classList.add('bg-amber-500/25', 'border-amber-400');
+        } else {
+          dom.badgeHoraPico.textContent = 'INYECTAR';
+          dom.btnHoraPico.classList.remove('bg-amber-500/25', 'border-amber-400');
+        }
+
+        if (state.lluviaRemaining > 0) {
+          activeCount++;
+          dom.badgeLluvia.textContent = `ACTIVO (${state.lluviaRemaining}c)`;
+          dom.btnLluvia.classList.add('bg-indigo-500/30', 'border-indigo-400');
+        } else {
+          dom.badgeLluvia.textContent = 'INYECTAR';
+          dom.btnLluvia.classList.remove('bg-indigo-500/30', 'border-indigo-400');
+        }
+
+        dom.activeDisturbanceCount.textContent =
+          activeCount === 0 ? 'Sin perturbación' : `${activeCount} perturbación(es) activa(s)`;
+        dom.activeDisturbanceCount.className =
+          activeCount === 0 ? 'text-[11px] font-mono text-slate-400' : 'text-[11px] font-mono text-amber-300 font-bold';
+      }
+
+      // Actualiza UI del Switch de Corte de Internet / Modo Edge Local
+      function updateInternetModeUI() {
+        if (state.internetCut) {
+          dom.headerIotBadge.className =
+            'px-3 py-1.5 rounded-xl bg-amber-950/70 border border-amber-500/50 flex items-center gap-2 text-xs';
+          dom.headerIotDot.className = 'w-2 h-2 rounded-full bg-amber-400 animate-led';
+          dom.headerIotText.className = 'font-mono font-semibold text-amber-300';
+          dom.headerIotText.textContent = 'WAN CAÍDA • EDGE LOCAL AUTÓNOMO';
+
+          dom.iotCard.classList.add('border-amber-500/50');
+          dom.iotLatencyTag.textContent = 'WAN: OFFLINE';
+          dom.iotLatencyTag.className = 'text-[11px] font-mono text-amber-400 font-bold';
+
+          dom.internetSwitchDot.className = 'w-2.5 h-2.5 rounded-full bg-amber-400 animate-led';
+          dom.internetSwitchState.textContent = 'EDGE LOCAL';
+          dom.internetSwitchState.className =
+            'px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-mono text-[10px] border border-amber-500/40 font-bold';
+
+          dom.iotExplanationBox.innerHTML = `
+            <strong class="text-amber-300">¡Corte de Internet Simulado! Modo Edge Local Activo:</strong>
+            El enlace con la nube/Centro de Control está caído, pero la shell local del microcontrolador (Arduino/PLC en gabinete de vereda) continúa ejecutando el lazo cerrado PD sin latencia ni pérdida de control. Buffer local: <span class="font-mono text-amber-200">${state.edgeBufferedPackets} tramas</span>.
+          `;
+        } else {
+          dom.headerIotBadge.className =
+            'px-3 py-1.5 rounded-xl bg-emerald-950/60 border border-emerald-500/40 flex items-center gap-2 text-xs';
+          dom.headerIotDot.className = 'w-2 h-2 rounded-full bg-emerald-400';
+          dom.headerIotText.className = 'font-mono font-semibold text-emerald-300';
+          dom.headerIotText.textContent = 'WAN IoT + EDGE ACTIVO';
+
+          dom.iotCard.classList.remove('border-amber-500/50');
+          dom.iotLatencyTag.textContent = 'RTT: 18ms';
+          dom.iotLatencyTag.className = 'text-[11px] font-mono text-emerald-400';
+
+          dom.internetSwitchDot.className = 'w-2.5 h-2.5 rounded-full bg-emerald-400';
+          dom.internetSwitchState.textContent = 'ONLINE';
+          dom.internetSwitchState.className =
+            'px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 font-mono text-[10px] border border-emerald-500/30';
+
+          dom.iotExplanationBox.innerHTML = `
+            <strong class="text-emerald-400">Enlace WAN / Centro de Control Activo:</strong>
+            El controlador local (Arduino/PLC en gabinete IP65) ejecuta el lazo cerrado PD en tiempo real y sincroniza telemetría con la nube SCADA.
+          `;
+        }
+      }
+
+      // =========================================================================
+      // 4. MODELO MATEMÁTICO DE LA PLANTA Y CONTROLADOR (P / PD / PI / PID)
+      // =========================================================================
+      function evaluateImmediateControlPreview() {
+        // Recalcula el error inmediato al mover R(t) para reflejar régimen transitorio al instante
+        state.error = state.queue - state.setpoint;
+        classifyRegime(state.error, state.udFiltered, state.queue, state.greenTime);
+        updateTelemetryDOM();
+      }
+
+      function classifyRegime(err, ud, queue, greenTime) {
+        if (queue >= SATURATION_QUEUE || (greenTime >= GREEN_MAX - 0.1 && err > 18)) {
+          state.regime = 'SATURACION';
+        } else if (Math.abs(err) > NORMALITY_BAND || Math.abs(ud) > 1.8) {
+          state.regime = 'TRANSITORIO';
+        } else {
+          state.regime = 'ESTABLE';
+        }
+      }
+
+      // Ejecuta un paso discreto de control (1 ciclo semafórico completo)
+      function stepSimulationCycle() {
+        state.cycle += 1;
+
+        // 1. Calcular Perturbaciones Externas D(t) [autos/ciclo]
+        let surgeCars = 0;
+        if (state.horaPicoRemaining > 0) {
+          surgeCars = 25;
+          state.horaPicoRemaining -= 1;
+        }
+
+        // Factor de eficiencia de evacuación (afectado por Lluvia / Accidente)
+        let evacuationEfficiency = 1.0;
+        let weatherEquivalentDisturbance = 0;
+        if (state.lluviaRemaining > 0) {
+          evacuationEfficiency = 0.42; // Reduce capacidad de cruce al 42% (calzada resbaladiza / carril obstruido)
+          weatherEquivalentDisturbance = 12; // Equivalente en carga retenida [autos/ciclo]
+          state.lluviaRemaining -= 1;
+        }
+
+        // Perturbación total D(t)
+        const totalDisturbance = surgeCars + weatherEquivalentDisturbance;
+        state.disturbance = totalDisturbance;
+
+        // 2. Llegada de vehículos durante el ciclo (Flujo base + microvariación natural + Hora Pico)
+        const naturalNoise = Math.sin(state.cycle * 1.7) * 0.6;
+        const arrivals = Math.max(0, state.baseFlow + naturalNoise + surgeCars);
+
+        // Cola acumulada antes de la evacuación del ciclo
+        const queueBeforeGreen = state.queue + arrivals;
+
+        // 3. Medición por Magnetómetros H(s) y Comparador E(t) = C_medida(t) - R(t)
+        const error = queueBeforeGreen - state.setpoint;
+        state.error = error;
+
+        // 4. Cálculo de la Ley de Control Gc(s)
+        const mode = state.controllerType;
+        let up = 0;
+        let ud = 0;
+        let ui = 0;
+        let greenCmd = state.baseGreen;
+
+        if (mode !== 'OPEN') {
+          // Acción Proporcional: Kp * E(t)
+          up = state.kp * error;
+
+          // Acción Derivativa Dinámica: Ud(t) = Kd * de(t)/dt
+          if (mode === 'PD' || mode === 'PID') {
+            const deDt = error - state.prevError; // Δt = 1 ciclo
+            const rawUd = state.kd * deDt;
+            // Suavizado ligero para evitar picos artificiales manteniendo respuesta anticipatoria nítida
+            ud = 0.78 * rawUd + 0.22 * state.udFiltered;
+          } else {
+            ud = 0;
+          }
+
+          // Acción Integral con Anti-Windup: Ki * ∫ E(t) dt
+          if (mode === 'PI' || mode === 'PID') {
+            const candidateIntegral = state.integralError + error;
+            const candidateUi = state.ki * candidateIntegral;
+            const preSat = state.baseGreen + up + ud + candidateUi;
+            // Solo integra si no satura en la misma dirección del error
+            if ((preSat < GREEN_MAX && preSat > GREEN_MIN) || (preSat >= GREEN_MAX && error < 0) || (preSat <= GREEN_MIN && error > 0)) {
+              state.integralError = Math.max(-60, Math.min(60, candidateIntegral));
+            }
+            ui = state.ki * state.integralError;
+          } else {
+            state.integralError = 0;
+            ui = 0;
+          }
+
+          const rawGreen = state.baseGreen + up + ud + ui;
+          greenCmd = Math.max(GREEN_MIN, Math.min(GREEN_MAX, rawGreen));
+        } else {
+          // Lazo Abierto: tiempo fijo independientemente del error
+          up = 0;
+          ud = 0;
+          ui = 0;
+          state.integralError = 0;
+          greenCmd = state.baseGreen;
+        }
+
+        state.upCurrent = up;
+        state.udFiltered = ud;
+        state.uiCurrent = ui;
+        state.greenTime = greenCmd;
+        state.prevError = error;
+
+        // 5. Dinámica de la Planta Gp(s): Evacuación vehicular durante el tiempo de verde U(t)
+        // Tasa base calibrada: 30s de verde evacúan ~12.5 autos (capacidad nominal ligeramente superior al flujo base de 10 a/c)
+        const dischargeRate = 0.42 * evacuationEfficiency;
+        const maxEvacuated = greenCmd * dischargeRate;
+        const actualEvacuated = Math.min(queueBeforeGreen, maxEvacuated);
+
+        // Longitud de cola resultante al final del ciclo C(t)
+        state.queue = Math.max(0, queueBeforeGreen - actualEvacuated);
+
+        // Recalcular error post-evacuación para evaluación de estado estable
+        const postCycleError = state.queue - state.setpoint;
+        state.error = postCycleError;
+
+        // 6. Clasificación del Régimen de Respuesta
+        classifyRegime(postCycleError, ud, state.queue, greenCmd);
+
+        // 7. Gestión de Buffer IoT si hay corte de Internet
+        if (state.internetCut) {
+          state.edgeBufferedPackets += 1;
+        } else {
+          state.edgeBufferedPackets = 0;
+        }
+
+        // 8. Registrar muestra en el historial de las 6 señales
+        recordHistorySample();
+
+        // Actualizar UI y visuales
+        updateDisturbanceButtonsUI();
+        updateInternetModeUI();
+        updateTelemetryDOM();
+        syncVisualCarsWithQueue();
+      }
+
+      function recordHistorySample() {
+        state.history.push({
+          t: state.cycle,
+          controller: state.controllerType,
+          edgeOffline: state.internetCut,
+          regime: state.regime,
+          R: Number(state.setpoint.toFixed(2)),
+          C: Number(state.queue.toFixed(2)),
+          D: Number(state.disturbance.toFixed(2)),
+          E: Number(state.error.toFixed(2)),
+          Ud: Number(state.udFiltered.toFixed(2)),
+          U: Number(state.greenTime.toFixed(2))
+        });
+
+        if (state.history.length > MAX_HISTORY) {
+          state.history.shift();
+        }
+      }
+
+      // =========================================================================
+      // 5. ACTUALIZACIÓN DE TELEMETRÍA EN EL DOM (BADGES, BLOQUES Y VALORES)
+      // =========================================================================
+      function updateTelemetryDOM() {
+        dom.headerCycleClock.textContent = `t = ${state.cycle}`;
+
+        // Badge de Régimen de Respuesta
+        if (state.regime === 'TRANSITORIO') {
+          dom.regimeBadge.className =
+            'px-4 py-2 rounded-xl bg-amber-500/20 border border-amber-400/70 text-amber-200 flex items-center gap-2.5 shadow-lg shadow-amber-950/40 transition-all duration-300';
+          dom.regimeDot.className = 'w-3 h-3 rounded-full bg-amber-400 animate-led';
+          dom.regimeText.textContent = 'ESTADO TRANSITORIO';
+        } else if (state.regime === 'SATURACION') {
+          dom.regimeBadge.className =
+            'px-4 py-2 rounded-xl bg-rose-500/20 border border-rose-500/80 text-rose-200 flex items-center gap-2.5 shadow-lg shadow-rose-950/50 transition-all duration-300';
+          dom.regimeDot.className = 'w-3 h-3 rounded-full bg-rose-500 animate-led';
+          dom.regimeText.textContent = 'SATURACIÓN / INESTABILIDAD';
+        } else {
+          dom.regimeBadge.className =
+            'px-4 py-2 rounded-xl bg-emerald-500/15 border border-emerald-500/50 text-emerald-300 flex items-center gap-2.5 shadow-lg transition-all duration-300';
+          dom.regimeDot.className = 'w-3 h-3 rounded-full bg-emerald-400 animate-led';
+          dom.regimeText.textContent = 'ESTADO ESTABLE';
+        }
+
+        // HUD Canvas
+        dom.hudAssignedGreen.textContent = `${state.greenTime.toFixed(1)} s`;
+        dom.hudQueueCount.textContent = `${Math.round(state.queue)} autos`;
+
+        // Diagrama de Bloques en vivo
+        dom.bdRef.textContent = `${state.setpoint} autos`;
+        const errSign = state.error > 0 ? '+' : '';
+        dom.bdErr.textContent = `${errSign}${state.error.toFixed(1)} autos`;
+        dom.bdCtrl.textContent = state.controllerType === 'OPEN' ? 'LAZO ABIERTO' : `Ley ${state.controllerType}`;
+        dom.bdCtrlTerms.textContent =
+          state.controllerType === 'OPEN'
+            ? 'Sin realimentación'
+            : `Up:${state.upCurrent.toFixed(1)} Ud:${state.udFiltered.toFixed(1)}`;
+        dom.bdAct.textContent = `${state.greenTime.toFixed(1)} s`;
+        dom.bdDist.textContent = `+${state.disturbance.toFixed(0)} a/c`;
+        dom.bdOut.textContent = `${state.queue.toFixed(1)} autos`;
+        dom.bdFb.textContent = `${Math.round(state.queue)} pulsos`;
+
+        // Valores actuales de las 6 señales
+        dom.valSig1.textContent = `${state.setpoint.toFixed(1)} autos`;
+        dom.valSig2.textContent = `${state.queue.toFixed(1)} autos`;
+        dom.valSig3.textContent = `${state.disturbance.toFixed(1)} a/c`;
+        dom.valSig4.textContent = `${errSign}${state.error.toFixed(1)} autos`;
+        const udSign = state.udFiltered > 0 ? '+' : '';
+        dom.valSig5.textContent = `${udSign}${state.udFiltered.toFixed(2)} s`;
+        dom.valSig6.textContent = `${state.greenTime.toFixed(1)} s`;
+      }
+
+      // =========================================================================
+      // 6. ANIMACIÓN FÍSICA DE LA INTERSECCIÓN (HTML5 CANVAS 2D)
+      // =========================================================================
+      const CAR_COLORS = ['#38bdf8', '#f8fafc', '#f59e0b', '#a855f7', '#ec4899', '#10b981', '#cbd5e1'];
+
+      function initVisualEntities() {
+        state.cars = [];
+        for (let i = 0; i < 15; i++) {
+          state.cars.push({
+            id: i,
+            lane: i % 2, // 0: carril superior, 1: carril inferior
+            x: 120 + Math.floor(i / 2) * 44,
+            speed: 0,
+            color: CAR_COLORS[i % CAR_COLORS.length],
+            passing: false
+          });
+        }
+
+        state.rainDrops = [];
+        for (let i = 0; i < 95; i++) {
+          state.rainDrops.push({
+            x: Math.random() * 1200,
+            y: Math.random() * 320,
+            len: 8 + Math.random() * 10,
+            vy: 320 + Math.random() * 180
+          });
+        }
+      }
+
+      function syncVisualCarsWithQueue() {
+        const targetVisualCars = Math.min(34, Math.max(0, Math.round(state.queue)));
+        // Contar autos esperando antes de la línea de detención
+        const waitingCars = state.cars.filter((c) => !c.passing);
+
+        if (waitingCars.length < targetVisualCars) {
+          const toAdd = targetVisualCars - waitingCars.length;
+          for (let i = 0; i < toAdd; i++) {
+            const idx = waitingCars.length + i;
+            state.cars.push({
+              id: Math.random(),
+              lane: idx % 2,
+              x: -40 - i * 42,
+              speed: 140,
+              color: CAR_COLORS[Math.floor(Math.random() * CAR_COLORS.length)],
+              passing: false
+            });
+          }
+        } else if (waitingCars.length > targetVisualCars) {
+          // Liberar autos excedentes hacia el cruce para representar evacuación
+          let toRelease = waitingCars.length - targetVisualCars;
+          for (let c of state.cars) {
+            if (!c.passing && toRelease > 0) {
+              c.passing = true;
+              toRelease--;
+            }
+          }
+        }
+      }
+
+      function resizeCanvasToDisplaySize(canvas) {
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        const rect = canvas.getBoundingClientRect();
+        const width = Math.max(10, Math.floor(rect.width * dpr));
+        const height = Math.max(10, Math.floor(rect.height * dpr));
+        if (canvas.width !== width || canvas.height !== height) {
+          canvas.width = width;
+          canvas.height = height;
+        }
+        return { ctx: canvas.getContext('2d'), w: rect.width, h: rect.height, dpr };
+      }
+
+      function renderIntersection(dt) {
+        const { ctx, w, h, dpr } = resizeCanvasToDisplaySize(dom.intersectionCanvas);
+        ctx.save();
+        ctx.scale(dpr, dpr);
+
+        // Determinar fase visual del semáforo dentro del ciclo [0..1]
+        // 0.00 - 0.42: ROJO | 0.42 - 0.90: VERDE | 0.90 - 1.00: AMARILLO
+        let lightState = 'RED';
+        if (state.phaseProgress >= 0.42 && state.phaseProgress < 0.90) {
+          lightState = 'GREEN';
+        } else if (state.phaseProgress >= 0.90) {
+          lightState = 'YELLOW';
+        }
+
+        // Actualizar texto HUD de fase
+        if (lightState === 'RED') {
+          dom.hudLightPhase.textContent = 'ROJO (Midendo Cola)';
+          dom.hudLightPhase.className = 'font-bold text-rose-400 ml-1';
+        } else if (lightState === 'GREEN') {
+          const remSec = Math.max(0, state.greenTime * (1 - (state.phaseProgress - 0.42) / 0.48));
+          dom.hudLightPhase.textContent = `VERDE (${remSec.toFixed(0)}s rest.)`;
+          dom.hudLightPhase.className = 'font-bold text-emerald-400 ml-1';
+        } else {
+          dom.hudLightPhase.textContent = 'AMARILLO (Precaución)';
+          dom.hudLightPhase.className = 'font-bold text-amber-400 ml-1';
+        }
+
+        // 1. Fondo urbano nocturno
+        ctx.fillStyle = '#070c16';
+        ctx.fillRect(0, 0, w, h);
+
+        // Geometría de la intersección
+        const roadY = h * 0.42;
+        const roadH = h * 0.44;
+        const crossX = w * 0.68;
+        const crossW = Math.min(115, w * 0.14);
+        const stopLineX = crossX - 18;
+
+        // Calle transversal vertical (Avenida perpendicular)
+        ctx.fillStyle = '#131b2e';
+        ctx.fillRect(crossX, 0, crossW, h);
+        ctx.strokeStyle = '#26344f';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(crossX, -2, crossW, h + 4);
+
+        // Avenida principal horizontal (Av. del Libertador)
+        ctx.fillStyle = '#162036';
+        ctx.fillRect(0, roadY, w, roadH);
+
+        // Cordones de vereda superior e inferior
+        ctx.fillStyle = '#283854';
+        ctx.fillRect(0, roadY - 4, crossX, 4);
+        ctx.fillRect(crossX + crossW, roadY - 4, w - (crossX + crossW), 4);
+        ctx.fillRect(0, roadY + roadH, crossX, 4);
+        ctx.fillRect(crossX + crossW, roadY + roadH, w - (crossX + crossW), 4);
+
+        // Línea divisoria discontinua de carriles
+        ctx.save();
+        ctx.strokeStyle = 'rgba(226, 232, 240, 0.35)';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([16, 14]);
+        ctx.beginPath();
+        ctx.moveTo(0, roadY + roadH / 2);
+        ctx.lineTo(stopLineX - 8, roadY + roadH / 2);
+        ctx.moveTo(crossX + crossW + 12, roadY + roadH / 2);
+        ctx.lineTo(w, roadY + roadH / 2);
+        ctx.stroke();
+        ctx.restore();
+
+        // Senda peatonal (Cebra)
+        ctx.fillStyle = 'rgba(241, 245, 249, 0.72)';
+        const stripeCount = 6;
+        const stripeH = (roadH - 16) / (stripeCount * 2 - 1);
+        for (let i = 0; i < stripeCount; i++) {
+          ctx.fillRect(stopLineX + 5, roadY + 8 + i * stripeH * 2, 11, stripeH);
+        }
+
+        // Línea blanca de detención
+        ctx.fillStyle = '#f8fafc';
+        ctx.fillRect(stopLineX - 4, roadY + 4, 4, roadH - 8);
+
+        // 2. SENSORES MAGNETÓMETROS ENTERRADOS EN EL ASFALTO H(s)
+        // Ubicados en ambos carriles como los círculos blancos del TFI (pág. 10)
+        const sensorPositions = [
+          { x: stopLineX - 38, y: roadY + roadH * 0.26 },
+          { x: stopLineX - 38, y: roadY + roadH * 0.74 },
+          { x: stopLineX - 115, y: roadY + roadH * 0.26 },
+          { x: stopLineX - 115, y: roadY + roadH * 0.74 },
+          { x: stopLineX - 195, y: roadY + roadH * 0.26 },
+          { x: stopLineX - 195, y: roadY + roadH * 0.74 }
+        ];
+
+        state.magnetometerPulse += dt * 4.5;
+
+        sensorPositions.forEach((sp) => {
+          // Verificar si algún vehículo está sobre o cerca del magnetómetro
+          const triggered = state.cars.some(
+            (c) => Math.abs(c.x - sp.x) < 24 && Math.abs((roadY + (c.lane === 0 ? roadH * 0.26 : roadH * 0.74)) - sp.y) < 15
+          );
+
+          // Anillo blanco pintado en el asfalto
+          ctx.beginPath();
+          ctx.arc(sp.x, sp.y, 8, 0, Math.PI * 2);
+          ctx.strokeStyle = triggered ? '#38bdf8' : 'rgba(226, 232, 240, 0.65)';
+          ctx.lineWidth = 2.2;
+          ctx.stroke();
+
+          // Núcleo del magnetómetro
+          ctx.beginPath();
+          ctx.arc(sp.x, sp.y, 4, 0, Math.PI * 2);
+          ctx.fillStyle = triggered ? '#38bdf8' : '#334155';
+          ctx.fill();
+
+          // Onda electromagnética cuando detecta masa metálica
+          if (triggered) {
+            const waveR = 8 + ((state.magnetometerPulse % 1) * 14);
+            ctx.beginPath();
+            ctx.arc(sp.x, sp.y, waveR, 0, Math.PI * 2);
+            ctx.strokeStyle = `rgba(56, 189, 248, ${1 - (state.magnetometerPulse % 1)})`;
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+          }
+        });
+
+        // 3. GABINETE DE CONTROL IP65 EN VEREDA + ENLACE IOT/NUBE
+        const cabX = Math.max(16, stopLineX - 165);
+        const cabY = roadY - 54;
+        // Cableado subterráneo sensor -> gabinete
+        ctx.save();
+        ctx.strokeStyle = 'rgba(56, 189, 248, 0.4)';
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.moveTo(stopLineX - 115, roadY + roadH * 0.26);
+        ctx.lineTo(cabX + 22, cabY + 42);
+        ctx.stroke();
+        ctx.restore();
+
+        // Caja metálica IP65
+        ctx.fillStyle = '#1e293b';
+        ctx.strokeStyle = state.internetCut ? '#f59e0b' : '#38bdf8';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.roundRect(cabX, cabY, 46, 42, 6);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = '#e2e8f0';
+        ctx.font = 'bold 8px JetBrains Mono, monospace';
+        ctx.fillText('PLC/PD', cabX + 7, cabY + 15);
+        ctx.fillStyle = state.internetCut ? '#fbbf24' : '#34d399';
+        ctx.fillText(state.internetCut ? 'EDGE' : 'IoT OK', cabX + 7, cabY + 28);
+
+        // Nube SCADA superior derecha (muestra corte de internet visualmente)
+        const cloudX = w - 138;
+        const cloudY = 14;
+        ctx.fillStyle = state.internetCut ? 'rgba(120, 53, 15, 0.45)' : 'rgba(15, 23, 42, 0.85)';
+        ctx.strokeStyle = state.internetCut ? '#f59e0b' : '#334155';
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.roundRect(cloudX, cloudY, 124, 34, 8);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.font = 'bold 9px JetBrains Mono, monospace';
+        ctx.fillStyle = state.internetCut ? '#fbbf24' : '#38bdf8';
+        ctx.fillText(state.internetCut ? '⚠ WAN DESCONECTADA' : '☁ CENTRO TRÁNSITO', cloudX + 9, cloudY + 14);
+        ctx.font = '9px Inter, sans-serif';
+        ctx.fillStyle = state.internetCut ? '#fde68a' : '#94a3b8';
+        ctx.fillText(state.internetCut ? 'Lazo local 100% activo' : 'Telemetría sincronizada', cloudX + 9, cloudY + 26);
+
+        // Línea de enlace entre Gabinete y Nube
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(cabX + 46, cabY + 12);
+        ctx.lineTo(cloudX, cloudY + 18);
+        if (state.internetCut) {
+          ctx.strokeStyle = 'rgba(245, 158, 11, 0.55)';
+          ctx.setLineDash([5, 5]);
+        } else {
+          ctx.strokeStyle = 'rgba(52, 211, 153, 0.45)';
+          ctx.setLineDash([8, 4]);
+        }
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        ctx.restore();
+
+        // 4. ACTUALIZAR Y DIBUJAR VEHÍCULOS
+        // Ordenar autos por carril y posición X para evitar colisiones
+        for (let lane = 0; lane < 2; lane++) {
+          const laneCars = state.cars
+            .filter((c) => c.lane === lane)
+            .sort((a, b) => b.x - a.x);
+
+          const laneY = roadY + (lane === 0 ? roadH * 0.26 : roadH * 0.74);
+
+          laneCars.forEach((car, idx) => {
+            const leadCar = idx > 0 ? laneCars[idx - 1] : null;
+            const evacuationFactor = state.lluviaRemaining > 0 ? 0.52 : 1.0;
+            const cruiseSpeed = (lightState === 'GREEN' || car.passing ? 195 : 130) * evacuationFactor;
+
+            let targetX = w + 100;
+            if (lightState !== 'GREEN' && !car.passing && car.x <= stopLineX - 16) {
+              targetX = stopLineX - 22;
+            }
+            if (leadCar) {
+              targetX = Math.min(targetX, leadCar.x - 36);
+            }
+
+            const distToTarget = targetX - car.x;
+            if (distToTarget > 2) {
+              const desiredSpeed = Math.min(cruiseSpeed, distToTarget * 3.5);
+              car.speed += (desiredSpeed - car.speed) * Math.min(1, dt * 6);
+              car.x += car.speed * dt;
+            } else {
+              car.speed = 0;
+            }
+
+            // Si cruzó la línea de detención en verde, marcar como passing
+            if (lightState === 'GREEN' && car.x > stopLineX - 10) {
+              car.passing = true;
+            }
+
+            // Dibujar vehículo estilizado vista superior
+            const carW = 26;
+            const carH = 13;
+            ctx.save();
+            ctx.translate(car.x, laneY);
+
+            // Sombra
+            ctx.fillStyle = 'rgba(0,0,0,0.45)';
+            ctx.beginPath();
+            ctx.roundRect(-carW / 2 + 2, -carH / 2 + 3, carW, carH, 4);
+            ctx.fill();
+
+            // Carrocería
+            ctx.fillStyle = car.color;
+            ctx.beginPath();
+            ctx.roundRect(-carW / 2, -carH / 2, carW, carH, 4);
+            ctx.fill();
+
+            // Parabrisas
+            ctx.fillStyle = '#0f172a';
+            ctx.fillRect(2, -carH / 2 + 2, 5, carH - 4);
+
+            // Luces delanteras
+            ctx.fillStyle = '#fef08a';
+            ctx.fillRect(carW / 2 - 2, -carH / 2 + 2, 2, 3);
+            ctx.fillRect(carW / 2 - 2, carH / 2 - 5, 2, 3);
+
+            // Luces de freno si está detenido
+            if (car.speed < 12) {
+              ctx.fillStyle = '#ef4444';
+              ctx.fillRect(-carW / 2, -carH / 2 + 2, 2, 3);
+              ctx.fillRect(-carW / 2, carH / 2 - 5, 2, 3);
+            }
+            ctx.restore();
+          });
+        }
+
+        // Limpiar autos que ya salieron de pantalla
+        state.cars = state.cars.filter((c) => c.x < w + 60);
+
+        // Si Lluvia/Accidente está activo, dibujar cono de incidente + gotas de lluvia
+        if (state.lluviaRemaining > 0) {
+          // Cono naranja de obstrucción parcial después del cruce
+          const coneX = crossX + crossW * 0.55;
+          const coneY = roadY + roadH * 0.74;
+          ctx.fillStyle = '#f97316';
+          ctx.beginPath();
+          ctx.moveTo(coneX, coneY - 8);
+          ctx.lineTo(coneX - 6, coneY + 6);
+          ctx.lineTo(coneX + 6, coneY + 6);
+          ctx.closePath();
+          ctx.fill();
+
+          // Lluvia animada
+          ctx.strokeStyle = 'rgba(125, 211, 252, 0.35)';
+          ctx.lineWidth = 1.2;
+          ctx.beginPath();
+          for (let drop of state.rainDrops) {
+            drop.y += drop.vy * dt;
+            drop.x -= drop.vy * 0.25 * dt;
+            if (drop.y > h) {
+              drop.y = -10;
+              drop.x = Math.random() * (w + 150);
+            }
+            ctx.moveTo(drop.x, drop.y);
+            ctx.lineTo(drop.x - 3, drop.y + drop.len);
+          }
+          ctx.stroke();
+        }
+
+        // 5. CABEZAL SEMAFÓRICO REAL CON LUCES ROJA, AMARILLA Y VERDE + DISPLAY
+        const poleX = stopLineX + 2;
+        const poleY = roadY - 78;
+
+        // Poste
+        ctx.fillStyle = '#475569';
+        ctx.fillRect(poleX - 2, poleY + 56, 4, 24);
+
+        // Caja del semáforo
+        ctx.fillStyle = '#090d16';
+        ctx.strokeStyle = '#334155';
+        ctx.lineWidth = 1.8;
+        ctx.beginPath();
+        ctx.roundRect(poleX - 15, poleY - 8, 30, 66, 7);
+        ctx.fill();
+        ctx.stroke();
+
+        // Lente Roja
+        ctx.beginPath();
+        ctx.arc(poleX, poleY + 6, 7, 0, Math.PI * 2);
+        ctx.fillStyle = lightState === 'RED' ? '#ef4444' : '#3f151b';
+        if (lightState === 'RED') {
+          ctx.shadowColor = '#ef4444';
+          ctx.shadowBlur = 14;
+        }
+        ctx.fill();
+        ctx.shadowBlur = 0;
+
+        // Lente Amarilla
+        ctx.beginPath();
+        ctx.arc(poleX, poleY + 25, 7, 0, Math.PI * 2);
+        ctx.fillStyle = lightState === 'YELLOW' ? '#f59e0b' : '#3b280c';
+        if (lightState === 'YELLOW') {
+          ctx.shadowColor = '#f59e0b';
+          ctx.shadowBlur = 14;
+        }
+        ctx.fill();
+        ctx.shadowBlur = 0;
+
+        // Lente Verde
+        ctx.beginPath();
+        ctx.arc(poleX, poleY + 44, 7, 0, Math.PI * 2);
+        ctx.fillStyle = lightState === 'GREEN' ? '#10b981' : '#0b2e23';
+        if (lightState === 'GREEN') {
+          ctx.shadowColor = '#10b981';
+          ctx.shadowBlur = 16;
+        }
+        ctx.fill();
+        ctx.shadowBlur = 0;
+
+        // Display digital del tiempo verde asignado junto al cabezal
+        ctx.fillStyle = '#0f172a';
+        ctx.strokeStyle = lightState === 'GREEN' ? '#10b981' : '#334155';
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.roundRect(poleX + 20, poleY + 12, 46, 24, 6);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.font = 'bold 11px JetBrains Mono, monospace';
+        ctx.fillStyle = lightState === 'GREEN' ? '#34d399' : '#94a3b8';
+        ctx.fillText(`${state.greenTime.toFixed(0)}s`, poleX + 30, poleY + 28);
+
+        ctx.restore();
+      }
+
+      // =========================================================================
+      // 7. RENDERIZADO DE LAS 6 SEÑALES EN TIEMPO REAL (OSCILOSCOPIOS CANVAS)
+      // =========================================================================
+      function drawSignalChart(canvas, config) {
+        const { ctx, w, h, dpr } = resizeCanvasToDisplaySize(canvas);
+        ctx.save();
+        ctx.scale(dpr, dpr);
+
+        const padL = 40;
+        const padR = 12;
+        const padT = 14;
+        const padB = 22;
+        const plotW = Math.max(20, w - padL - padR);
+        const plotH = Math.max(20, h - padT - padB);
+
+        // Fondo
+        ctx.fillStyle = '#070b14';
+        ctx.fillRect(0, 0, w, h);
+
+        const data = state.history;
+        if (data.length === 0) {
+          ctx.restore();
+          return;
+        }
+
+        // Calcular escala dinámica Y
+        let minVal = config.minFloor !== undefined ? config.minFloor : Infinity;
+        let maxVal = config.maxCeil !== undefined ? config.maxCeil : -Infinity;
+
+        for (let pt of data) {
+          const v = pt[config.key];
+          if (v < minVal) minVal = v;
+          if (v > maxVal) maxVal = v;
+          if (config.refKey && pt[config.refKey] !== undefined) {
+            const rv = pt[config.refKey];
+            if (rv < minVal) minVal = rv;
+            if (rv > maxVal) maxVal = rv;
+          }
+        }
+
+        if (config.includeZero) {
+          minVal = Math.min(minVal, 0);
+          maxVal = Math.max(maxVal, 0);
+        }
+
+        // Margen superior e inferior del 15%
+        const span = Math.max(config.minSpan || 4, maxVal - minVal);
+        const yMin = config.hardMin !== undefined ? config.hardMin : minVal - span * 0.14;
+        const yMax = config.hardMax !== undefined ? config.hardMax : maxVal + span * 0.16;
+        const yRange = Math.max(0.001, yMax - yMin);
+
+        const toX = (idx) => {
+          if (data.length === 1) return padL + plotW * 0.5;
+          return padL + (idx / (data.length - 1)) * plotW;
+        };
+        const toY = (val) => padT + plotH - ((val - yMin) / yRange) * plotH;
+
+        // 1. Franjas verticales de Régimen (solo para Señal 2: Variable Controlada C(t))
+        if (config.showRegimeBands && data.length > 1) {
+          for (let i = 0; i < data.length - 1; i++) {
+            const x1 = toX(i);
+            const x2 = toX(i + 1);
+            const reg = data[i + 1].regime;
+            if (reg === 'TRANSITORIO') {
+              ctx.fillStyle = 'rgba(245, 158, 11, 0.16)';
+            } else if (reg === 'SATURACION') {
+              ctx.fillStyle = 'rgba(244, 63, 94, 0.20)';
+            } else {
+              ctx.fillStyle = 'rgba(16, 185, 129, 0.11)';
+            }
+            ctx.fillRect(x1, padT, x2 - x1 + 0.5, plotH);
+          }
+        }
+
+        // 2. Banda de normalidad ±5 autos (para Señal 4: Error E(t))
+        if (config.showNormalityBand) {
+          const yTop = Math.max(padT, toY(NORMALITY_BAND));
+          const yBot = Math.min(padT + plotH, toY(-NORMALITY_BAND));
+          if (yBot > yTop) {
+            ctx.fillStyle = 'rgba(16, 185, 129, 0.12)';
+            ctx.fillRect(padL, yTop, plotW, yBot - yTop);
+          }
+        }
+
+        // 3. Líneas de saturación superior/inferior (para Señal 6: Actuación U(t))
+        if (config.saturationBounds) {
+          ctx.save();
+          ctx.strokeStyle = 'rgba(244, 63, 94, 0.45)';
+          ctx.setLineDash([4, 4]);
+          ctx.lineWidth = 1;
+          [GREEN_MIN, GREEN_MAX].forEach((bound) => {
+            const by = toY(bound);
+            if (by >= padT && by <= padT + plotH) {
+              ctx.beginPath();
+              ctx.moveTo(padL, by);
+              ctx.lineTo(padL + plotW, by);
+              ctx.stroke();
+            }
+          });
+          ctx.restore();
+        }
+
+        // 4. Grilla horizontal y etiquetas eje Y
+        const gridSteps = 4;
+        ctx.font = '10px JetBrains Mono, monospace';
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'middle';
+
+        for (let g = 0; g <= gridSteps; g++) {
+          const val = yMin + (g / gridSteps) * yRange;
+          const gy = toY(val);
+
+          ctx.strokeStyle = 'rgba(30, 45, 74, 0.65)';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(padL, gy);
+          ctx.lineTo(padL + plotW, gy);
+          ctx.stroke();
+
+          ctx.fillStyle = '#64748b';
+          const label = Math.abs(val) >= 10 ? val.toFixed(0) : val.toFixed(1);
+          ctx.fillText(label, padL - 5, gy);
+        }
+
+        // Línea de cero destacada si aplica
+        if (config.includeZero && yMin < 0 && yMax > 0) {
+          const yZero = toY(0);
+          ctx.strokeStyle = 'rgba(148, 163, 184, 0.45)';
+          ctx.lineWidth = 1.2;
+          ctx.beginPath();
+          ctx.moveTo(padL, yZero);
+          ctx.lineTo(padL + plotW, yZero);
+          ctx.stroke();
+        }
+
+        // Eje X (marcas de tiempo t en ciclos)
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        ctx.fillStyle = '#64748b';
+        const xTicks = Math.min(4, data.length - 1);
+        if (xTicks > 0) {
+          for (let k = 0; k <= xTicks; k++) {
+            const idx = Math.round((k / xTicks) * (data.length - 1));
+            const tx = toX(idx);
+            ctx.fillText(`t=${data[idx].t}`, tx, padT + plotH + 5);
+          }
+        } else {
+          ctx.fillText(`t=${data[0].t}`, padL + plotW * 0.5, padT + plotH + 5);
+        }
+
+        // 5. Línea de referencia punteada R(t) superpuesta en Señal 2
+        if (config.refKey && data.length > 1) {
+          ctx.save();
+          ctx.strokeStyle = '#22d3ee';
+          ctx.setLineDash([5, 4]);
+          ctx.lineWidth = 1.6;
+          ctx.beginPath();
+          data.forEach((pt, idx) => {
+            const px = toX(idx);
+            const py = toY(pt[config.refKey]);
+            if (idx === 0) ctx.moveTo(px, py);
+            else ctx.lineTo(px, py);
+          });
+          ctx.stroke();
+          ctx.restore();
+        }
+
+        // 6. Relleno degradado bajo la curva principal
+        if (data.length > 1) {
+          const grad = ctx.createLinearGradient(0, padT, 0, padT + plotH);
+          grad.addColorStop(0, config.fillTop);
+          grad.addColorStop(1, 'rgba(7, 11, 20, 0.0)');
+
+          const baseLineY = config.includeZero ? toY(0) : padT + plotH;
+
+          ctx.beginPath();
+          data.forEach((pt, idx) => {
+            const px = toX(idx);
+            const py = toY(pt[config.key]);
+            if (idx === 0) ctx.moveTo(px, py);
+            else ctx.lineTo(px, py);
+          });
+          ctx.lineTo(toX(data.length - 1), baseLineY);
+          ctx.lineTo(toX(0), baseLineY);
+          ctx.closePath();
+          ctx.fillStyle = grad;
+          ctx.fill();
+        }
+
+        // 7. Curva principal de la señal
+        ctx.strokeStyle = config.stroke;
+        ctx.lineWidth = 2.3;
+        ctx.lineJoin = 'round';
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        data.forEach((pt, idx) => {
+          const px = toX(idx);
+          const py = toY(pt[config.key]);
+          if (idx === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        });
+        ctx.stroke();
+
+        // Punto luminoso en la muestra más reciente
+        const lastIdx = data.length - 1;
+        const lastX = toX(lastIdx);
+        const lastY = toY(data[lastIdx][config.key]);
+        ctx.beginPath();
+        ctx.arc(lastX, lastY, 4, 0, Math.PI * 2);
+        ctx.fillStyle = config.stroke;
+        ctx.shadowColor = config.stroke;
+        ctx.shadowBlur = 10;
+        ctx.fill();
+        ctx.shadowBlur = 0;
+
+        ctx.restore();
+      }
+
+      const CHART_CONFIGS = [
+        {
+          key: 'R',
+          stroke: '#22d3ee',
+          fillTop: 'rgba(34, 211, 238, 0.22)',
+          hardMin: 0,
+          maxCeil: 42,
+          minSpan: 10
+        },
+        {
+          key: 'C',
+          refKey: 'R',
+          stroke: '#38bdf8',
+          fillTop: 'rgba(56, 189, 248, 0.20)',
+          hardMin: 0,
+          maxCeil: 35,
+          minSpan: 15,
+          showRegimeBands: true
+        },
+        {
+          key: 'D',
+          stroke: '#fb7185',
+          fillTop: 'rgba(251, 113, 133, 0.25)',
+          hardMin: 0,
+          maxCeil: 30,
+          minSpan: 10
+        },
+        {
+          key: 'E',
+          stroke: '#fbbf24',
+          fillTop: 'rgba(251, 191, 36, 0.20)',
+          includeZero: true,
+          minFloor: -10,
+          maxCeil: 15,
+          minSpan: 12,
+          showNormalityBand: true
+        },
+        {
+          key: 'Ud',
+          stroke: '#c084fc',
+          fillTop: 'rgba(192, 132, 252, 0.24)',
+          includeZero: true,
+          minFloor: -6,
+          maxCeil: 8,
+          minSpan: 8
+        },
+        {
+          key: 'U',
+          stroke: '#34d399',
+          fillTop: 'rgba(52, 211, 153, 0.22)',
+          hardMin: 10,
+          hardMax: 65,
+          saturationBounds: true
+        }
+      ];
+
+      function renderAllCharts() {
+        for (let i = 0; i < 6; i++) {
+          drawSignalChart(dom.charts[i], CHART_CONFIGS[i]);
+        }
+      }
+
+      // =========================================================================
+      // 8. EXPORTACIÓN DE DATOS CSV PARA EXCEL / INFORME TFI
+      // =========================================================================
+      function exportHistoryToCsv() {
+        if (state.history.length === 0) {
+          showToast('No hay datos registrados para exportar.');
+          return;
+        }
+
+        const headers = [
+          'Ciclo_t',
+          'Controlador',
+          'Modo_Red_IoT',
+          'Regimen_Respuesta',
+          'Referencia_R_autos',
+          'Medida_C_autos',
+          'Perturbacion_D_autos_ciclo',
+          'Error_E_autos',
+          'Derivativo_Ud_seg',
+          'Actuacion_Verde_U_seg'
+        ];
+
+        const rows = state.history.map((row) => [
+          row.t,
+          row.controller,
+          row.edgeOffline ? 'EDGE_LOCAL_OFFLINE' : 'WAN_CLOUD_ONLINE',
+          row.regime,
+          row.R,
+          row.C,
+          row.D,
+          row.E,
+          row.Ud,
+          row.U
+        ].join(','));
+
+        const csvContent = '\uFEFF' + [headers.join(','), ...rows].join('\n');
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `UTN_TFI_Semaforo_Adaptativo_${state.controllerType}_t${state.cycle}.csv`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+
+        showToast(`CSV descargado (${state.history.length} muestras de telemetría).`);
+      }
+
+      // =========================================================================
+      // 9. REINICIO COMPLETO Y BUCLE PRINCIPAL DE ANIMACIÓN
+      // =========================================================================
+      function resetSimulation() {
+        state.cycle = 0;
+        state.phaseProgress = 0;
+        state.queue = state.setpoint;
+        state.prevError = 0;
+        state.integralError = 0;
+        state.udFiltered = 0;
+        state.upCurrent = 0;
+        state.uiCurrent = 0;
+        state.greenTime = state.baseGreen;
+        state.error = 0;
+        state.disturbance = 0;
+        state.regime = 'ESTABLE';
+        state.horaPicoRemaining = 0;
+        state.lluviaRemaining = 0;
+        state.edgeBufferedPackets = 0;
+        state.history = [];
+
+        recordHistorySample();
+        initVisualEntities();
+        updateDisturbanceButtonsUI();
+        updateInternetModeUI();
+        updateTelemetryDOM();
+        renderAllCharts();
+        showToast('Sistema reiniciado a t = 0. Señales e integradores limpios.');
+      }
+
+      function mainLoop(now) {
+        const dt = Math.min(0.05, (now - state.lastFrameTime) / 1000);
+        state.lastFrameTime = now;
+
+        if (state.running) {
+          // Duración base de 1 ciclo visual = 1.65s a velocidad 1x
+          const cycleFrequency = (1 / 1.65) * state.speed;
+          state.phaseProgress += dt * cycleFrequency;
+
+          if (state.phaseProgress >= 1.0) {
+            state.phaseProgress -= 1.0;
+            stepSimulationCycle();
+          }
+        }
+
+        renderIntersection(dt);
+        renderAllCharts();
+
+        requestAnimationFrame(mainLoop);
+      }
+
+      // =========================================================================
+      // 10. EVENT LISTENERS E INICIALIZACIÓN
+      // =========================================================================
+      function init() {
+        // Sincronizar todos los controles numéricos y sliders
+        bindParamPair(dom.numSetpoint, dom.sliderSetpoint, 0, 40, 'setpoint');
+        bindParamPair(dom.numBaseGreen, dom.sliderBaseGreen, 15, 45, 'baseGreen');
+        bindParamPair(dom.numKp, dom.sliderKp, 0.1, 4.0, 'kp');
+        bindParamPair(dom.numKd, dom.sliderKd, 0.0, 3.0, 'kd');
+        bindParamPair(dom.numKi, dom.sliderKi, 0.0, 1.5, 'ki');
+        bindParamPair(dom.numBaseFlow, dom.sliderBaseFlow, 2, 25, 'baseFlow');
+
+        // Selector de tipo de controlador
+        dom.controllerSelect.addEventListener('change', (e) => {
+          state.controllerType = e.target.value;
+          updateControllerControlsState();
+          showToast(`Controlador cambiado a: ${e.target.options[e.target.selectedIndex].text}`);
+        });
+
+        // Botón Iniciar / Pausar
+        dom.btnTogglePlay.addEventListener('click', () => {
+          state.running = !state.running;
+          if (state.running) {
+            dom.btnTogglePlay.className =
+              'col-span-2 py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/50 transition cursor-pointer';
+            dom.textPlayPause.textContent = 'Pausar Simulación';
+            dom.simStatusDot.className = 'w-2.5 h-2.5 rounded-full bg-emerald-400 animate-led';
+          } else {
+            dom.btnTogglePlay.className =
+              'col-span-2 py-2.5 px-3 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-sky-950/50 transition cursor-pointer';
+            dom.textPlayPause.textContent = 'Reanudar Simulación';
+            dom.simStatusDot.className = 'w-2.5 h-2.5 rounded-full bg-amber-400';
+          }
+        });
+
+        // Botones de velocidad (1x / 2x / 4x)
+        dom.speedBtns.forEach((btn) => {
+          btn.addEventListener('click', () => {
+            state.speed = Number(btn.dataset.speed);
+            dom.speedBtns.forEach((b) => {
+              const active = Number(b.dataset.speed) === state.speed;
+              b.className = active
+                ? 'speed-btn flex-1 py-1.5 rounded-lg text-xs font-mono font-bold bg-sky-500/20 text-sky-300 border border-sky-500/40 cursor-pointer'
+                : 'speed-btn flex-1 py-1.5 rounded-lg text-xs font-mono font-semibold text-slate-400 hover:text-slate-200 cursor-pointer';
+            });
+          });
+        });
+
+        // Botón Reiniciar Sistema
+        dom.btnReset.addEventListener('click', resetSimulation);
+
+        // Botón Perturbación: Hora Pico (+25 autos)
+        dom.btnHoraPico.addEventListener('click', () => {
+          state.horaPicoRemaining = 6; // Inyecta oleada durante 6 ciclos
+          updateDisturbanceButtonsUI();
+          showToast('Perturbación inyectada: Hora Pico (+25 autos/ciclo por 6 ciclos).');
+        });
+
+        // Botón Perturbación: Lluvia / Accidente
+        dom.btnLluvia.addEventListener('click', () => {
+          state.lluviaRemaining = 6; // Reduce capacidad de evacuación durante 6 ciclos
+          updateDisturbanceButtonsUI();
+          showToast('Perturbación inyectada: Lluvia / Accidente (eficiencia vial reducida).');
+        });
+
+        // Switch Corte de Internet (Modo Edge Local)
+        dom.btnToggleInternet.addEventListener('click', () => {
+          state.internetCut = !state.internetCut;
+          updateInternetModeUI();
+          if (state.internetCut) {
+            showToast('Corte de Internet simulado: PLC/Arduino operando en Modo Edge Local autónomo.');
+          } else {
+            showToast('Conexión IoT restablecida: Telemetría sincronizada con Centro de Control.');
+          }
+        });
+
+        // Exportar CSV
+        dom.btnExportCsv.addEventListener('click', exportHistoryToCsv);
+
+        // Arrancar estado inicial limpio
+        updateControllerControlsState();
+        resetSimulation();
+        // Sobrescribir el toast inicial de reset
+        dom.toastNotification.classList.add('translate-y-20', 'opacity-0');
+
+        requestAnimationFrame(mainLoop);
+      }
+
+      window.addEventListener('load', init);
+    })();
+  </script>
+</body>
+</html>
