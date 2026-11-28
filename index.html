@@ -698,7 +698,7 @@
       const GREEN_MIN = 15.0;          // Límite inferior de seguridad del actuador [s]
       const GREEN_MAX = 60.0;          // Límite superior de saturación del actuador [s]
       const NORMALITY_BAND = 5.0;      // Banda de normalidad ±5 autos (histéresis conceptual)
-      const SATURATION_QUEUE = 65.0;   // Umbral crítico de saturación/inestabilidad vial
+      const SATURATION_QUEUE = 80.0;   // Umbral crítico de saturación/inestabilidad vial
 
       const state = {
         running: true,
@@ -1007,7 +1007,7 @@
       }
 
       function classifyRegime(err, ud, queue, greenTime) {
-        if (queue >= SATURATION_QUEUE || (greenTime >= GREEN_MAX - 0.1 && err > 18)) {
+        if (queue >= SATURATION_QUEUE) {
           state.regime = 'SATURACION';
         } else if (Math.abs(err) > NORMALITY_BAND || Math.abs(ud) > 1.8) {
           state.regime = 'TRANSITORIO';
@@ -1048,7 +1048,7 @@
         const queueBeforeGreen = state.queue + arrivals;
 
         // 3. Medición por Magnetómetros H(s) y Comparador E(t) = C_medida(t) - R(t)
-        const error = queueBeforeGreen - state.setpoint;
+        const error = state.queue - state.setpoint;
         state.error = error;
 
         // 4. Cálculo de la Ley de Control Gc(s)
@@ -1106,7 +1106,7 @@
 
         // 5. Dinámica de la Planta Gp(s): Evacuación vehicular durante el tiempo de verde U(t)
         // Tasa base calibrada: 30s de verde evacúan ~12.5 autos (capacidad nominal ligeramente superior al flujo base de 10 a/c)
-        const dischargeRate = 0.42 * evacuationEfficiency;
+        const dischargeRate = 0.34 * evacuationEfficiency;
         const maxEvacuated = greenCmd * dischargeRate;
         const actualEvacuated = Math.min(queueBeforeGreen, maxEvacuated);
 
@@ -2071,9 +2071,9 @@
 
         // Botón Perturbación: Hora Pico (+25 autos)
         dom.btnHoraPico.addEventListener('click', () => {
-          state.horaPicoRemaining = 6; // Inyecta oleada durante 6 ciclos
+          state.horaPicoRemaining = 3; // Inyecta oleada durante 3 ciclos
           updateDisturbanceButtonsUI();
-          showToast('Perturbación inyectada: Hora Pico (+25 autos/ciclo por 6 ciclos).');
+          showToast('Perturbación inyectada: Hora Pico (+25 autos/ciclo por 3 ciclos).');
         });
 
         // Botón Perturbación: Lluvia / Accidente
